@@ -16,12 +16,19 @@ class Hiera
         attr_reader :api_version
       end
 
+      attr_reader :host, :consul
+
       def initialize
-        @config = Config[:consul]
+        begin
+          @config = Config[:consul]
+        rescue StandardError => e
+          raise ConfigurationError, "[hiera-consul]: config cannot be read: #{e}"
+        end
+
         verify_config!
         parse_hosts!
 
-        @consul              = consul
+        @consul = setup_consul
         use_ssl!
 
         @cache = {}
@@ -47,8 +54,6 @@ class Hiera
 
         answer
       end
-
-      private
 
       def resolve_paths(key, scope, order_override)
         if @config[:base]
@@ -80,7 +85,7 @@ class Hiera
           end
       end
 
-      def consul
+      def setup_consul
         fail '[hiera-consul]: No consul server is available' if @hosts.empty?
         @host = @hosts.shift
 
@@ -93,7 +98,7 @@ class Hiera
 
       def consul_fallback
         debug "Could not reach #{@host}, retrying with #{@hosts.first}"
-        consul
+        setup_consul
       end
 
       def use_ssl!
@@ -176,10 +181,6 @@ class Hiera
         else
           res_array
         end
-      end
-
-      def debug(msg)
-        Hiera.debug("[hiera-consul]: #{msg}")
       end
 
       def wrapquery(path)
@@ -272,6 +273,12 @@ class Hiera
           # Values of all nodes
           @cache["#{key}_#{property}_array"] = [value]
         end
+      end
+
+      private
+
+      def debug(msg)
+        Hiera.debug("[hiera-consul]: #{msg}")
       end
     end
   end
