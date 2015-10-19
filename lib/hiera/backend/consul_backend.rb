@@ -3,6 +3,9 @@ require 'net/https'
 require 'json'
 require 'base64'
 
+class ConfigurationError < ArgumentError
+end
+
 # Hiera backend for Consul
 class Hiera
   module Backend
@@ -14,12 +17,14 @@ class Hiera
       end
 
       def initialize
-        @config              = Config[:consul]
+        @config = Config[:consul]
+        verify_config!
+        parse_hosts!
+
         @consul              = consul
-        @consul.read_timeout = @config[:http_read_timeout] || 10
-        @consul.open_timeout = @config[:http_connect_timeout] || 10
-        @cache               = {}
         use_ssl!
+
+        @cache = {}
         build_cache!
       end
 
@@ -34,7 +39,7 @@ class Hiera
         filtered_paths.each do |path|
           return @cache[key] if path == 'services' && @cache.key?(key)
 
-          debug("Lookup #{path}/#{key} on #{@config[:host]}:#{@config[:port]}")
+          debug("Lookup #{path}/#{key} on #{@host}:#{@config[:port]}")
 
           answer = wrapquery("#{path}/#{key}")
           break if answer
@@ -53,15 +58,42 @@ class Hiera
           end
         elsif @config[:paths]
           @config[:paths].map { |p| Backend.parse_string(p, scope, 'key' => key) }
+        else
+          probable_source = @config[:base] ? :base : :paths
+          raise ConfigurationError, "[hiera-consul]: There is an issue with your hierarchy. Please check #{probable_source} configuration"
+          exit 1
         end
       end
 
+      def verify_config!
+        return true if
+          @config[:host] && @config[:port] && (@config[:paths] || @config[:base])
+        raise ConfigurationError, '[hiera-consul]: Missing minimum configuration, please check hiera.yaml'
+      end
+
+      def parse_hosts!
+        @hosts =
+          if @config[:host].is_a?(String)
+            [@config[:host]]
+          else
+            @config[:host]
+          end
+      end
+
       def consul
-        if @config[:host] && @config[:port]
-          Net::HTTP.new(@config[:host], @config[:port])
-        else
-          fail '[hiera-consul]: Missing minimum configuration, please check hiera.yaml'
-        end
+        fail '[hiera-consul]: No consul server is available' if @hosts.empty?
+        @host = @hosts.shift
+
+        debug "Trying #{@host}"
+        @consul              = Net::HTTP.new(@host, @config[:port])
+        @consul.read_timeout = @config[:http_read_timeout] || 10
+        @consul.open_timeout = @config[:http_connect_timeout] || 10
+        @consul
+      end
+
+      def consul_fallback
+        debug "Could not reach #{@host}, retrying with #{@hosts.first}"
+        consul
       end
 
       def use_ssl!
@@ -114,7 +146,7 @@ class Hiera
       end
 
       def filter_paths(paths, key)
-        paths.each_with_object([]) do |path, acc|
+        paths.reduce([]) do |acc, path|
           if "#{path}/#{key}".match('//')
             # Check that we are not looking somewhere that will make hiera
             # crash subsequent lookups
@@ -125,6 +157,7 @@ class Hiera
           else
             acc << path
           end
+          acc
         end
       end
 
@@ -174,15 +207,20 @@ class Hiera
 
       def request(httpreq)
         @consul.request(httpreq)
-      rescue StandardError => e
-        debug('Could not connect to Consul')
-        raise Exception, e.message unless @config[:failure] == 'graceful'
-        return nil
+      rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError => e
+        if @hosts.length >= 1
+          consul_fallback
+          retry
+        else
+          debug('Could not connect to Consul')
+          raise Exception, e.message unless @config[:failure] == 'graceful'
+          return nil
+        end
       end
 
       def query_services
         path = "/#{self.class.api_version}/catalog/services"
-        debug("Querying #{path}")
+        debug("Querying #{@host}#{path}")
         wrapquery(path)
       end
 
