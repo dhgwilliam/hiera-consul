@@ -14,7 +14,7 @@ class Hiera
 
           Hiera::Config.load(config)
           stub_request(:get, "http://127.0.0.1:8500/v1/catalog/services").
-            with(:headers => {'Accept'=>'*/*', 'User-Agent'=>'Ruby'}).
+            with(:headers => {'Accept'=>'*/*'}).
             to_return(:status => 200, :body => '[{"Node":"estpcsm4","Address":"10.195.121.10","ServiceID":"consul","ServiceName":"consul","ServiceTags":[],"ServiceAddress":"","ServicePort":8300}]', :headers => {})
         end
 
@@ -35,11 +35,11 @@ class Hiera
           before do
             Consul_backend.new
             stub_request(:get, "http://127.0.0.1:8500/v1/kv/configuration/test.example.com/test").
-              with(:headers => {'Accept'=>'*/*', 'User-Agent'=>'Ruby'}).
+              with(:headers => {'Accept'=>'*/*'}).
               to_return(:status => 404, :body => "", :headers => {})
 
             stub_request(:get, "http://127.0.0.1:8500/v1/kv/configuration/common/test").
-              with(:headers => {'Accept'=>'*/*', 'User-Agent'=>'Ruby'}).
+              with(:headers => {'Accept'=>'*/*'}).
               to_return(:status => 200, :body => '[{"CreateIndex":20,"ModifyIndex":20,"LockIndex":0,"Key":"configuration/common/test","Flags":0,"Value":"dGVzdGluZw=="}]', :headers => {})
           end
 
