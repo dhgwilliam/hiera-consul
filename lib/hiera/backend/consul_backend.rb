@@ -187,6 +187,11 @@ class Hiera
         httpreq = Net::HTTP::Get.new("#{path}#{token(path)}")
         result  = request(httpreq)
 
+        if result.nil?
+          debug('No response from any server')
+          return nil
+        end
+
         unless result.is_a?(Net::HTTPSuccess)
           debug("HTTP response code was #{result.code}")
           return nil
@@ -208,7 +213,7 @@ class Hiera
 
       def request(httpreq)
         @consul.request(httpreq)
-      rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError => e
+      rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError, Errno::ECONNREFUSED => e
         if @hosts.length >= 1
           consul_fallback
           retry
