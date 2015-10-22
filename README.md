@@ -12,16 +12,21 @@ The following hiera.yaml should get you started.
     :consul:
       :host: 127.0.0.1
       :port: 8500
-      :paths:
-        - /v1/kv/configuration/%{fqdn}
-        - /v1/kv/configuration/common
+      :base: /v1/kv/configuration
+
+    :hierarchy:
+      - "%{fqdn}
+      - common
 
 ## Extra parameters
 
 As this module uses http to talk with Consul API the following parameters are also valid and available
 
     :consul:
-      :host: 127.0.0.1
+      :host: 
+        - 127.0.0.1
+        - 10.10.1.1
+        - 172.16.1.1
       :port: 8500
       :use_ssl: false
       :ssl_verify: false
@@ -31,6 +36,11 @@ As this module uses http to talk with Consul API the following parameters are al
       :failure: graceful
       :ignore_404: true
       :token: acl-uuid-token
+      :paths:
+        - /v1/kv/configuration/%{fqdn}
+        - /v1/kv/configuration/common
+
+Note that :base and :paths are mutually exclusive parameters.
 
 ## Query the catalog
 
@@ -72,7 +82,7 @@ If you want to flatten the output array you can always use [join](https://forge.
 
 ## Thanks
 
-Heavily based on [etcd-hiera](https://github.com/garethr/hiera-etcd) written by @garethr which was inspired by [hiera-http](https://github.com/crayfishx/hiera-http) from @crayfishx.
+Codebase borrowed wholesale (before refactoring) from [lynxman](https://github.com/lynxman/hiera-consul) which in turn was heavily based on [etcd-hiera](https://github.com/garethr/hiera-etcd) written by @garethr which was inspired by [hiera-http](https://github.com/crayfishx/hiera-http) from @crayfishx.
 
 Thanks to @mitchellh for writing such wonderful tools and the [API Documentation](http://www.consul.io/docs/agent/http.html)
 
